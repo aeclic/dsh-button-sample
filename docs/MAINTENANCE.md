@@ -1,3 +1,9 @@
+> **这是一份 fork 副本。** 本文件是上游 `dsh-power-button` 的维护指南原样保留，内容只对**电源部分**成立；
+> 路径、npm 包名、GitHub 地址都指向上游，本 fork 不发布到 npm、也不使用那个 Mnemon 档案。
+> 本 fork 新增的「继续生成」与「停止按钮转动圈」不受此文档约束，见仓库根 `README.md`。
+>
+> 同时，本文提到的 `<repo>`、profile 安装行、版本号均为 2026-10-08 上游快照，**不要照抄到本 fork**。
+
 # dsh-power-button 维护指南
 
 > **这是仓库副本（云端备份）。** 活的、可检索的那份在 Mnemon Documents：文档 id `4eae0cca-279b-4e20-adfd-aca0724df20c`，标题《dsh-power-button 插件维护指南（DSH 桌面版电源按钮）》。

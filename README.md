@@ -1,6 +1,5 @@
-# dsh-power-button
+# dsh-button-sample
 
-![npm version](https://img.shields.io/npm/v/dsh-power-button)
 ![platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6)
 ![language: JavaScript](https://img.shields.io/badge/language-JavaScript-F7DF1E)
 ![helper: PowerShell](https://img.shields.io/badge/helper-PowerShell-5391FE)
@@ -9,257 +8,191 @@
 
 **简体中文** ・ [English](README.en.md)
 
-给 **DSH 桌面版**（DeepSeek Harness Desktop）补两个电源入口，各自可单独开关：
+给 **DSH 桌面版**（DeepSeek Harness Desktop）一次性装齐三样东西，每一项都能单独关掉：
 
-- **悬浮按钮** —— 可拖动；贴到左右边缘会收成一条细边，鼠标移到细边上重新展开。点击弹出
+- **悬浮电源按钮** —— 可拖动；贴到左右边缘会收成一条细边，鼠标移上去重新展开。点击弹出
   「重启 DSH / 退出 DSH」菜单。
-- **侧栏电源** —— 坐在侧栏头像行里、头像左边，与旁边的官方图标按钮同形，弹出同一个菜单。
+- **侧栏电源图标** —— 坐在侧栏头像行里、头像左边，弹出同一个菜单。
+- **继续生成按钮** —— 输入框右侧的一个三角按钮。上一轮被**长度上限截断**、被**手动停止**、
+  或者**因为报错而停下**时出现，点一下接着写，一个字都不用敲。
+- **停止按钮的转动圈** —— 点了「停止生成」但对话没有立刻停下时，按钮外圈转一圈提示
+  「已经点到了，正在停」。
 
 ```
-拖动 → 贴边收起 → 鼠标移上去展开 → 点击 →（有任务在跑才二次确认）→ 重启 或 退出
+拖动 → 贴边收起 → 移上去展开 → 点击 →（有任务在跑才二次确认）→ 重启 或 退出
+截断 / 停止 / 报错 → 输入框右侧出现 ▶ → 点击 → 模型接着上一次的文本往下写
+点「停止生成」→ 未立刻停 → 外圈转动 → 停下后自动消失
 ```
 
 DSH 桌面版本身没有界内重启入口：托盘菜单里的重启只在开发构建下出现，发布版只能先退出、
-再从开始菜单重新打开。这个插件补的就是这一格。
+再从开始菜单重新打开。这个插件补的就是这一格；继续生成补的是「一轮没说完就没有下文了」
+那一格。
 
-- **只支持 Windows**：依赖 `taskkill`、WMI 与系统自带的 Windows PowerShell 5.1。
+- **只支持 Windows**：电源部分依赖 `taskkill`、WMI 与系统自带的 Windows PowerShell 5.1。
+  继续生成不依赖平台，但它和电源功能同包，所以整包声明 `os: win32`。
 - **零依赖**：纯 JS，不 import 任何 Harness 客户端包。
-- **不读别的插件的 DOM 或样式**：两个落点都走官方槽位；侧栏图标的位置也不依赖其他插件
-  （装了 `@linxin666/dsh-web-all` 时落在同一位置）。
-
----
-
-## 前言
-
-本插件由 **DeepSeek Harness Desktop + DeepSeek v4.1 flash** 制作：代码和这两份 README 都是模型
-写的，人工只参与了调试与审阅。它属于 **vibe code 产物**——每个反直觉的实现都在
-`docs/DESIGN.md` 里留了取证与实测数据，但请按"别人家 AI 养大的项目"来对待：上手前先看
-「已知边界」，遇到问题欢迎提 issue。
+- **不读别的插件的 DOM 或样式**：三个落点都走官方槽位（`sidebar.footer.action`、
+  `conversation.input.right`、`plugins.bundle.config`）。停止圈是唯一一处 DOM 观察，见下文。
 
 ---
 
 ## 安装
 
-安装会改动 profile 的 `package.json` 与 `pnpm-lock.yaml`，先备份：
+### 方式一：作为 profile 的本地 bundle（推荐，本机已验证）
 
 ```powershell
-Copy-Item "$env:DSH_HOME\profiles\desktop\package.json" `
-  "$env:DSH_HOME\profiles\desktop\package.json.bak" -Force
+# 1) 放进 profile 的 vendor 目录
+$dst = "$env:USERPROFILE\.dsh\profiles\desktop\vendor\dsh-button-sample"
+git clone https://github.com/aeclic/dsh-button-sample.git $dst
+
+# 2) 让 profile 认识它
+$dir = "$env:USERPROFILE\.dsh\profiles\desktop"
+#    package.json 的 dsh.profile.bundles 里加一行 "dsh-button-sample"
+#    package.json 的 dependencies 里加一行 "dsh-button-sample": "file:vendor/dsh-button-sample"
 ```
 
-### 方式一：从 npm 安装（推荐）
+然后在 GUI 的「设置 → 插件」里启用 **dsh-button-sample**。
+
+### 方式二：直接拷进 node_modules
 
 ```powershell
-& 'D:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' `
-  plugin --profile desktop add dsh-power-button
+$dst = "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-button-sample"
+git clone https://github.com/aeclic/dsh-button-sample.git $dst
 ```
 
-装的是注册表上的正式版本（当前 `0.1.0`）。**只有这种装法会被插件管理器的「检查更新」
-认出来**——它只对 npm registry 直装的包做版本比对，`github:` 规格和本地路径都会被跳过。
+与方式一等效，只是绕开了 bundler 的依赖登记；升级时记得删掉旧目录再拉。
 
-### 方式二：本地目录
-
-```powershell
-git clone https://github.com/WhichWitchWin/dsh-power-button.git
-& 'D:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' `
-  plugin --profile desktop add 'D:\path\to\dsh-power-button'
-```
-
-### 方式三：从 GitHub 直接装
-
-```powershell
-& 'D:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' `
-  plugin --profile desktop add 'github:WhichWitchWin/dsh-power-button#main'
-```
-
-（`#main` 是 git 引用，换成别的分支 / tag / commit 也行；整段删掉就取默认分支。）
-
-三种方式都会把依赖写进 profile 的 `package.json`，并把本包加进 `dsh.profile.bundles`
-（`dsh.bundle.patch` 一声明即激活）。**装完重启一次 DSH**（托盘退出再打开），两个界面就会
-出现。`lib/` 是可直接加载的成品，没有构建步骤，包内不含 `src/`、`node_modules/` 或中间产物。
-
-> CLI 路径以你的实际安装目录为准，并且**必须用桌面版自带的这个入口**：它给 profile
-> `desktop` 开了 `manageDesktopProfile`；`PATH` 里随便一个 `dsh` 会以
-> `profile "desktop" is managed exclusively by the Electron application` 拒绝。
-> 装到别的 profile 时把 `--profile` 换成那个名字即可。
-
-### 卸载
-
-```powershell
-& 'D:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' `
-  plugin --profile desktop remove dsh-power-button
-```
+装好后**重启 DSH**。三个界面应该都在：侧栏底部的电源图标、输入框右侧的继续按钮（仅在可继续时
+出现）、以及该插件卡片里的三个开关。
 
 ---
 
-## 使用
+## 三个开关
 
-| 操作 | 结果 |
-| --- | --- |
-| 拖动悬浮按钮 | 移动位置；松手时靠近左右边缘会吸附并收起 |
-| 鼠标移到细边上 | 展开成完整按钮（移开即收回） |
-| 点击按钮 | 弹出电源菜单 |
-| 点击菜单外的空白 | 关闭菜单，控件回到细条（不会常驻展开） |
-| `Esc` | 关闭菜单 |
-| `Enter` / `Space` | 等价于点击按钮 |
+插件的设置页（「设置 → 插件 → dsh-button-sample」）里有三行独立开关，存在
+`<profile>/dsh-button-sample.json`：
 
-- **上下边缘故意不作吸附目标**：那里有窗口控件和输入框，一条边会盖住两者。
-- 悬浮位置存在浏览器 `localStorage`。
-- **二次确认只在真有任务在跑时才问**：宿主报告有 agent 正在运行（子代理也算）时才弹确认，
-  因为那正是点击会毁掉用户拿不回来的工作的场景；空闲时直接执行，不给常见路径加摩擦。
-  宿主无法作答时按"有任务"处理。
+| 开关 | 默认 | 关掉之后 |
+| --- | --- | --- |
+| 悬浮电源按钮 | 开 | 悬浮球消失，侧栏电源不受影响 |
+| 侧栏底部电源图标 | 开 | 侧栏图标消失 |
+| 继续生成按钮 | 开 | 输入框右侧不再出现三角按钮 |
 
-### 按下去像一块小果冻 🍮
-
-两个按钮都会"捏"：
-
-- **按下**：被横向挤扁、纵向拉长一点点（`scale(.9, 1.1)`，0.16s），顺手挤出几颗 7px 的小
-  水珠，顺着你按压的方向甩出去、边飞边缩小淡掉。
-- **松手**：像果冻那样弹回来——横向先过冲 +12%、再缩到 −6%、再回到 +4%，纵向同时反向镜像
-  地晃，两三下之后才稳稳停住（悬浮 0.46s，侧栏 0.52s）。
-- **从细边钻出来**：不是"啪"地出现，而是从半宽滑出来（`scale(.5,1)` 且透明），落位时轻轻
-  弹几下（0.44s）。
-
-所以它不只是"能用"：按住有肉感，松手有回弹，贴边之后探出来也软软的。
-（时长和曲线是实测调过的——改之前先看 `docs/DESIGN.md`，那里面的数字互相咬着。）
-
-### 两个界面分开开关
-
-插件管理器里本插件自己的配置页上有两个开关：**悬浮电源按钮** / **侧栏底部电源图标**。
-插件卡片上的开关管的是整个包，这两个管的是各自的界面，改动即时生效、无需刷新。
+插件卡片上的总开关控制整个包，三行开关控制包内的单个界面。
 
 ---
 
-## 配置
+## 继续生成：它在哪些情况下可用
 
-界面开关存在 profile 目录下的 `dsh-power-button.json`，由配置页写入：
+按钮只在「上一轮已经结束、而且还能接着写」时出现。判断依据是最后一条 `turn/end` 的
+`reason.kind`：
 
-```json
-{ "floating": true, "sidebar": true }
-```
+| 结束原因 | 出现按钮 | 点下去会发生什么 |
+| --- | --- | --- |
+| `max-tokens` | 是 | 从被截断的那句话继续写 |
+| `aborted` / `interrupted`（手动停止） | 是 | 从停下的地方继续写 |
+| `error`（限流、服务端错误、超时、传输中断、空响应、流被关闭等） | 是 | 从断点继续；若这一轮一个 token 都没出，则重新作答 |
+| `blocked`（步骤被准入规则拒绝） | 是 | 重新发起这一轮 |
+| `forked` | 是 | 在被复制出来的分支上继续 |
+| `completed` | 否 | 这一轮已自然说完，没有可续的 |
 
-宿主半另有一个可选 `config` 块，两个与机器性能相关的**上限**（默认值适合普通机器）：
+悬停时按钮的 tooltip 会说明属于哪一种。「重新生成」是按钮在没有任何 assistant 文本可续时的
+写法——它说实话：这一下是重答，不是续写。
 
-| 键 | 默认 | 范围 | 含义 |
-| --- | --- | --- | --- |
-| `settleMs` | `500` | 0–30000 | 杀进程前留给 HTTP 响应抵达浏览器的时间 |
-| `waitForExitSeconds` | `20` | 1–300 | 等待旧壳真正消失的上限 |
+### 为什么报错也能继续
 
-端口一释放就立刻继续，所以这两个值通常不会被等满。慢机器或高负载机器上如果日志出现
-`WARNING: proceeding after ...s`，就把它调大。加在 profile 的 bundle patch 里：
+DSH 自带的 `conversationContinuation` 投影只承认六个错误码（`RATE_LIMIT`、`SERVER`、
+`TIMEOUT`、`TRANSPORT`、`EMPTY_RESPONSE`、`STREAM_CLOSED`）。其余错误——比如上游返回
+一个没归类的 5xx、工具激活失败、`UNKNOWN`——在自带逻辑里是没有继续入口的。这个包把判定
+放宽到「所有非 `completed` 的结束原因」，因为这些情况下**历史仍然停在一个可以续的前缀上**，
+用户的意图也一样清楚：接着来。
 
-```yaml
-- insert:
-    - id: ui-restart-button
-      name: 'dsh-power-button'
-      config:
-        settleMs: 800
-        waitForExitSeconds: 30
-```
+### 它是怎么做到的（不改一个字提示词）
 
----
+关键约束：发出去的请求必须以**被截断的那条 assistant 消息结尾**，模型才会续写前缀而不是
+另起一句回答。所以不能插入任何新的提示词文本。
 
-## 它怎么做到的
+做法是往 inbox 里塞一条 `source.kind === 'runtime-context'` 的消息。
+`AgentLoop.step()` 只用这个 kind 当作「开始一轮」的开关，**故意不把它写进会话表面**，于是
+`deriveMessages()` 看不到它，模型收到的历史与被截断那一刻逐字节相同。
 
-桌面版的重启由 Electron 主进程持有（`app.relaunch()` + `app.quit()`），但没有把这条能力开给
-插件，所以插件只能从外部**复刻**一次重启。这里有个先有鸡还是先有蛋的约束：**宿主进程是
-Electron 主进程的子进程**，杀掉主进程会连带杀掉宿主，下杀手的那段代码不能待在宿主进程里。
-于是工作交给一个**脱离进程树**的 PowerShell 辅助进程：
+但仅此还不够：`agent/pre-step` 是个 waterfall，time-context、plan-mode、instructions、
+session-reference 这些投影插件都会往 `decision.messages` 里追加自己的 user 消息，而**那些是
+会落进会话表面的**。只要多出一条尾随的 user 消息，前缀续写就退化成了全新回答。所以本包在
+该事件上用 `{ prepend: true }` 抢在最前面，包住其余监听器，看到组装完的结果后把除自己那条
+nudge 之外的全部丢掉。
 
-```
-点击「重启 DSH」→ 二次确认
-      ↓
-宿主半 POST /api/dsh-restart/action { action: "restart" }
-      ↓
-宿主半同步等待 lib/restart-helper.ps1 的「引导阶段」返回
-      ↓
-引导阶段用 Win32_Process.Create (WMI) 把自己重建为「工作阶段」，然后退出
-      ↓
-工作进程（父进程是 WmiPrvSE，不在应用进程树里，taskkill 够不到它）：
-  1. 记下起始时刻与 settleMs 的截止时刻
-  2. 趁主进程还活着，读它自己的命令行      ← 复刻 app.relaunch() 的语义
-  3. 趁宿主还活着，问出它监听的端口与绑定的地址（IPv4 / IPv6 都覆盖）
-  4. 杀旧进程树，等它彻底消失
-  5. 等端口释放（以 bind 那个地址判定）
-  6. 按原参数拉起新实例（并交接 DSH_* 环境变量）
-  7. 轮询新实例的窗口并置前，避免被别的程序遮住
-```
-
-`detached: true` 的 `spawn` 不够：子进程仍以本进程为父，`taskkill /T` 会连它一起杀掉；
-**只有 WMI 创建的子进程**既脱离进程树、又能在创建者退出后活下来。
-
-「退出」走 `taskkill`：宿主进程一退出，这个壳会把它的退出码一律当致命错误处理，这条路上
-没有更优雅的实现。
+（如果用户自己也在同一步里打了字，则整批原样放行——那时候用户的意思显然是正常发一条消息。）
 
 ---
 
-## 安全护栏
+## 停止按钮的转动圈
 
-三条路由都在 Host 源下，且必须自己调用 `requestRejection`——它们注册为 `exact` 路由，会先于
-Host 的 `/api` 前缀表被派发，因此会遮蔽 Host 给其他 `/api` 端点加的身份验证。插件主动复用
-Host 自己的授权判断（Host/Origin fence + 浏览器鉴权 cookie），待在同一个权限模型里。
+DSH 的「停止生成」点下去是**异步**的：点击只是把取消请求交给 Host，那一轮要等流真正关闭才
+结算。在这中间的几百毫秒里，按钮看起来和「点了没反应」一模一样，于是人会再点一次。
 
-- 另外两道独立围栏：socket 远程地址必须是回环（127/8、`::1`、IPv4-mapped），`Host` 头也必须
-  是回环权威。`X-Forwarded-For` 从不采信，`sec-fetch-site: cross-site` 直接拒。
-- 请求体上限 4 KiB，超限即拒（不是先缓冲再看大小）。
-- 破坏性动作是**一次性闸门**：接受过一次就不再放开，因为进程本来就要消失；只有"根本没启动
-  起来"（spawn 失败 / 引导超时 / 辅助进程的退出码 3）才释放，那种情况下重试才有意义。
-- 退出码 3 与拒绝标记文件区分"没动手就拒绝"（可安全重试）与"动手中途失败"（此时可能已经杀过
-  树，绝不放开闸门重来）。工作阶段的拒绝由辅助进程写标记文件，用户下次点击时读取。
+这个包在**按下时**先什么都不画，等 **350ms**：
 
----
+- 如果这一轮在这段宽限期内就停了（常见情况，按钮会从「停止」变回「发送」），**不画圈**——
+  不制造一段并不存在的等待。
+- 如果还没停，就在按钮外圈画一个转动的环，跟着按钮的位置走，直到按钮消失、标签不再是
+  「停止生成」、或者 15 秒兜底超时。
 
-## 排障
+所以这个圈只说一件事：「你点到了，还在停」。
 
-日志在 DSH 的 logs 目录下：`restart-button.log`（拒绝标记 `restart-button.refused`）。
-这个目录按 `$DSH_HOME\logs` → 从宿主自己的 profile 参数反推 → `%TEMP%` 的顺序解析，
-所以 `DSH_HOME` 不是 `~/.dsh` 时，日志在它实际指向的地方。
+实现上有两个刻意的选择：
+
+1. **圈是页面级浮层（`position: fixed`），不是按钮的子节点。** 那个按钮的子树归 React 所有，
+   往里塞节点会在下一次 reconcile 时被扫掉；把按钮改成 `position: relative` 来承载绝对定位
+   的子元素，又等于改动一个不属于本插件的控件。浮层按按钮的 `getBoundingClientRect()` 定位，
+   两边都不碰。
+2. **按下事件在 `document` 的捕获阶段读取。** 这样无论按钮自己的 React handler 做了什么
+   （抛错、空实现），圈都不受影响——这正是要回答的问题。
+
+停止按钮没有自己的 data 属性，唯一的稳定抓手是 `aria-label`，所以包内列出了 DSH 已发行的
+8 种语言里「停止生成」的写法。新增语言时该列表要跟着加一行。
 
 ---
 
 ## 已知边界
 
-- **只支持 Windows。** 依赖 `taskkill`、`Win32_Process.Create`（WMI）与
-  `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`；macOS / Linux 返回
-  `supported: false` 并隐藏界面。
-- **需要 WMI 可用。** 被禁用或被安全软件拦截时引导阶段失败，界面显示失败原因，不会静默。
-- **会硬中断进行中的会话。** 这是强杀的固有代价；有任务在跑时确认框会明确提示。
-- **重启不保证恢复界面状态。** 等价于"退出再打开"：未提交的输入不保留，进行中的回合不会
-  自动继续。
-- **终止模式（`dsh web`）下两个界面都不出现。** 那里没有可复刻的重启语义，插件回答
-  `supported: false` 并整体隐藏，而不是留一个点了没用的按钮。
-- **新窗口会尽力置前，但不保证抢到键盘焦点。** Windows 的前台锁让非前台进程无法夺取焦点，
-  所以窗口会被抬到最前，但你可能要再点一下才能输入。
-- **无法在头像菜单里插「重启」行。** 那个菜单的行是硬编码数组，没有菜单行槽位。
-- **侧栏落点依赖 `:has()` 与外壳的 class 后缀**（`footArea` / `footerActions` /
-  `settingsArea`）；不支持 `:has()` 时这段重排整体失效，退化成外壳自己的堆叠布局，
-  与本插件出现之前一样，不会更糟。悬浮按钮与此无关。
+- **仅 Windows**（整包 `os: win32`），因为电源功能需要 `taskkill` / WMI / PowerShell 5.1。
+- **继续生成依赖 `runtime-context` 这一内部约定**。它在本机 0.2.2-rc.5 上实测成立；如果
+  上游改了 `AgentLoop.step()` 对该 kind 的处理方式，续写会退化成「重新回答」——不会报错，
+  只是效果变差。
+- **停止圈的 350ms 宽限期是经验值**。网络很慢时圈会更早出现，很局部的机器上可能几乎看不到；
+  两种都不影响正确性。
+- **停止圈不认自定义语言包**：如果给 DSH 装了本包未列出语言的翻译，停止按钮的 `aria-label`
+  不在列表里，圈就不会出现。加一行即可修好。
 
 ---
 
-## 文件
+## 开发
 
-| 文件 | 作用 |
+`lib/` 是**直接发布的产物**，没有构建步骤。改动后跑测试：
+
+```sh
+node test/run.cjs
+```
+
+五个套件都以真实的 `lib/` 文件为对象，用手写的 Cordis context、DOM 与时钟替身驱动：
+
+| 套件 | 覆盖 |
 | --- | --- |
-| `lib/index.js` | 宿主半：三条 loopback 路由（status / action / config）、桌面拓扑探测、启动并等待引导进程 |
-| `lib/restart-helper.ps1` | 两阶段辅助：引导阶段用 WMI 重建工作进程；工作阶段读命令行、问端口、杀树、等条件、按原参数重启、把新窗口置前 |
-| `lib/client.js` | 浏览器半：悬浮控件（拖动 / 贴边 / 悬停展开 / 果冻反馈）、侧栏电源、配置页两个开关 |
-| `cordis.patch.yml` | bundle patch：一个宿主行；浏览器半由 `dsh.client` 自动挂载 |
-| `docs/DESIGN.md` | 工程笔记（中文）：每个反直觉决定的取证与实测数据 |
-| `LICENSE` | MIT |
-
-## 开发（仅二次开发需要看）
-
-`lib/` 是直接加载的成品，改完在界面上热重载即可看到效果（profile 以 `link:` 方式安装时，
-源码改动不需要重装）。改代码前建议先读 `docs/DESIGN.md`，它记录了那些看起来可以简化、
-实际上会炸的地方。
-
-## License
-
-MIT
+| `bundle.test.cjs` | 浏览器半的工厂形状、slot 注册与卸载 |
+| `guard.test.cjs` | `agent/pre-step` 纯净性守卫的五种输入 |
+| `host.test.cjs` | continue 判定矩阵、两条路由、鉴权栅栏、配置读写 |
+| `continue-button.test.cjs` | 按钮的显示条件、每种结束原因的文案、点击、忙碌、失败、卸载 |
+| `stop-ring.test.cjs` | 宽限期、浮层定位、跟随、四条清除路径、兜底、释放 |
 
 ---
 
-## 友情链接
+## 来源与许可
 
-- [LINUX DO](https://linux.do)
+MIT。本仓库 **fork 自 [WhichWitchWin/dsh-power-button](https://github.com/WhichWitchWin/dsh-power-button)**
+（电源部分整体来自上游，含 `lib/restart-helper.ps1`），并合并了
+`dsh-continue` 的继续生成能力，在此基础上做了两处扩展：可继续的结束原因从三种放宽到六种，
+以及停止按钮的转动圈。
+
+原上游的设计笔记仍在 `docs/DESIGN.md`，它逐条记录了电源部分每个反直觉决定的取证与实测数据；
+本 fork 新增的部分见上面的「继续生成」与「停止按钮的转动圈」两节。

@@ -1,305 +1,217 @@
-# dsh-power-button
+# dsh-button-sample
 
-![npm version](https://img.shields.io/npm/v/dsh-power-button)
 ![platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6)
 ![language: JavaScript](https://img.shields.io/badge/language-JavaScript-F7DF1E)
 ![helper: PowerShell](https://img.shields.io/badge/helper-PowerShell-5391FE)
 ![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-**English** ・ [中文](README.md)
+[简体中文](README.md) ・ **English**
 
-Two power affordances for the **DSH Desktop** GUI (DeepSeek Harness), each switchable on
-its own:
+Three additions to the **DSH desktop GUI** (DeepSeek Harness Desktop) in one bundle, each
+switchable on its own:
 
-- **Floating button** — draggable; snapping to the left or right screen edge collapses it
-  into a thin strip, and hovering the strip expands it again. Clicking opens a
-  "Restart DSH / Quit DSH" menu.
-- **Sidebar power icon** — sits in the sidebar's account row, to the left of the avatar,
-  shaped like the official icon buttons beside it, with the same menu.
+- **Floating power button** — draggable; snapping it to a side edge collapses it into a thin
+  strip that re-expands on hover. Clicking opens a "Restart DSH / Quit DSH" menu.
+- **Sidebar power icon** — sits in the sidebar's account row, left of the avatar, and opens the
+  same menu.
+- **Continue button** — a play triangle at the right of the composer. It appears when the last
+  turn was **cut off by the length limit**, **stopped by hand**, or **ended with an error**, and
+  one click carries on without typing anything.
+- **Stop ring** — when "Stop generating" is pressed but the turn does not end immediately, a ring
+  turns around the button to say "the click registered, it is stopping".
 
 ```
-drag → snaps to an edge and collapses → hover to expand → click
-     → (a second confirmation only when work is running) → restart or quit
+drag → snap to an edge → hover to expand → click → (confirm only if work is running) → restart or quit
+truncated / stopped / failed → a ▶ appears beside the composer → click → the model carries on
+press "Stop generating" → not instant → ring turns → gone once the turn settles
 ```
 
-DSH Desktop ships no in-window restart entry: the restart item in the tray menu appears
-only in development builds, so on a release build the only way is to quit and reopen from
-the Start menu. This plugin fills that gap.
+The desktop build has no in-window restart entry: the tray item only appears in development
+builds, so a release build means quitting and reopening from the Start menu. This bundle covers
+that gap, and the continue button covers the other one — a turn that stopped early and left you
+with nothing to reply to.
 
-- **Windows only**: relies on `taskkill`, WMI and the system's Windows PowerShell 5.1.
-- **Zero dependencies**: plain JS, imports no Harness client package.
-- **Reads no other plugin's DOM or styles**: both seats are official slots, and the
-  sidebar icon's position does not depend on any other package (with
-  `@linxin666/dsh-web-all` installed it lands in the same place).
-
----
-
-## Preamble
-
-This plugin was built by **DeepSeek Harness Desktop + DeepSeek v4.1 flash**: the code and
-both READMEs were written by the model, and the human only took part in debugging and
-review. It is a piece of **vibe code** — every counter-intuitive decision is backed by
-evidence and measurements in `docs/DESIGN.md`, but treat it as "a project raised by
-somebody else's AI": read the Known limits first, and open an issue when something breaks.
+- **Windows only**: the power half needs `taskkill`, WMI and the bundled Windows PowerShell 5.1.
+  Continue is platform-neutral, but it ships in the same package, which therefore declares
+  `os: win32`.
+- **No dependencies**: plain JavaScript, importing no Harness client package.
+- **No reading other plugins' DOM or styles**: all three seats are official slots
+  (`sidebar.footer.action`, `conversation.input.right`, `plugins.bundle.config`). The stop ring is
+  the single DOM observation, described below.
 
 ---
 
 ## Install
 
-Installing rewrites the profile's `package.json` and `pnpm-lock.yaml`, so back it up first:
+### As a profile bundle (recommended; verified on this machine)
 
 ```powershell
-Copy-Item "$env:DSH_HOME\profiles\desktop\package.json" `
-  "$env:DSH_HOME\profiles\desktop\package.json.bak" -Force
+# 1) put it in the profile's vendor directory
+$dst = "$env:USERPROFILE\.dsh\profiles\desktop\vendor\dsh-button-sample"
+git clone https://github.com/aeclic/dsh-button-sample.git $dst
+
+# 2) teach the profile about it, in $env:USERPROFILE\.dsh\profiles\desktop\package.json:
+#    - add "dsh-button-sample" to dsh.profile.bundles
+#    - add "dsh-button-sample": "file:vendor/dsh-button-sample" to dependencies
 ```
 
-### Option 1: from npm (recommended)
+Then enable **dsh-button-sample** under Settings → Plugins.
+
+### Directly into node_modules
 
 ```powershell
-& 'D:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' `
-  plugin --profile desktop add dsh-power-button
+$dst = "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-button-sample"
+git clone https://github.com/aeclic/dsh-button-sample.git $dst
 ```
 
-This installs the released registry version (currently `0.1.0`). **It is the only install
-method the plugin manager's update check understands** — that check compares versions only
-for packages installed straight from the npm registry, and skips `github:` specs and local
-paths.
+Equivalent to the above, minus the bundler's dependency bookkeeping; delete the directory before
+upgrading.
 
-### Option 2: a local directory
-
-```powershell
-git clone https://github.com/WhichWitchWin/dsh-power-button.git
-& 'D:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' `
-  plugin --profile desktop add 'D:\path\to\dsh-power-button'
-```
-
-### Option 3: straight from GitHub
-
-```powershell
-& 'D:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' `
-  plugin --profile desktop add 'github:WhichWitchWin/dsh-power-button#main'
-```
-
-(`#main` is a git committish — any branch, tag or commit works; drop the whole `#…` part to
-take the default branch.)
-
-Every method writes the dependency into the profile's `package.json` and adds this package
-to `dsh.profile.bundles` automatically — its `dsh.bundle.patch` declaration is what
-activates it. **Restart DSH once afterwards** (quit from the tray, then reopen) and both
-interfaces appear. There is no build step: `lib/` is the finished loadable artifact, and the
-package ships no `src/`, no `node_modules/` and no intermediate build output.
-
-> Adjust the CLI path to your own install, and **use this desktop-bundled entry**: it is the
-> one that sets `manageDesktopProfile` for profile `desktop`. An arbitrary `dsh` from `PATH`
-> refuses with `profile "desktop" is managed exclusively by the Electron application`. If you
-> install into a different profile, change `--profile` to its name.
-
-### Uninstall
-
-```powershell
-& 'D:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' `
-  plugin --profile desktop remove dsh-power-button
-```
+**Restart DSH** afterwards. All three interfaces should be present: the power icon at the sidebar
+foot, the continue button at the right of the composer (only while a turn can be continued), and
+three switches on the bundle's own page.
 
 ---
 
-## Usage
+## The three switches
 
-| Action | Result |
-| --- | --- |
-| Drag the floating button | Moves it; releasing near the left or right edge snaps and collapses it |
-| Hover the thin strip | Expands into the full button (collapses again on leaving) |
-| Click the button | Opens the power menu |
-| Click empty space | Closes the menu and the control returns to its strip (it does **not** stay expanded) |
-| `Esc` | Closes the menu |
-| `Enter` / `Space` | Same as clicking the button |
+The bundle's settings page has three independent rows, stored in `<profile>/dsh-button-sample.json`:
 
-- **The top and bottom edges are deliberately not snap targets**: they carry the window
-  chrome and the composer, and a strip there would sit on top of both.
-- The floating position is persisted in browser `localStorage`.
-- **The second confirmation appears only when work is actually running.** It is asked when
-  the Host reports a running agent (subagents included) — exactly the case where a click
-  destroys work the user cannot get back. An idle DSH acts at once, so the common path
-  carries no extra friction. When the Host cannot answer, the fail-safe answer is to ask.
+| Switch | Default | When off |
+| --- | --- | --- |
+| Floating power button | on | the floating control disappears; the sidebar icon is unaffected |
+| Sidebar power icon | on | the sidebar icon disappears |
+| Continue button | on | no play triangle beside the composer |
 
-### It feels like a little jelly 🍮
-
-Both buttons can be squished:
-
-- **Press**: squashed sideways and stretched a little vertically (`scale(.9, 1.1)`, 0.16s),
-  which also squeezes out a few 7px droplets — they are flung along the direction you
-  pressed and shrink away as they fly.
-- **Release**: it springs back like jelly, overshooting +12% sideways, dipping to −6% and
-  then +4%, with the vertical axis mirroring it the other way, settling after a couple of
-  wobbles (0.46s floating, 0.52s sidebar).
-- **Coming out of the sliver**: it does not pop into existence — it slides out from half
-  width (`scale(.5,1)`, transparent) and bounces gently into place (0.44s).
-
-So it is not merely usable: the press has some give, the release springs, and even sliding
-back out of the edge stays soft. (The timings and curves were tuned against measurements —
-read that part of `docs/DESIGN.md` before touching them; the numbers there bite each other.)
-
-### Switching the two interfaces separately
-
-This plugin's own configuration page in the plugin manager carries two switches: **floating
-power button** and **sidebar power icon**. The plugin card's own switch enables the whole
-package; these two control the individual interfaces, and both take effect immediately with
-no reload.
+The plugin card's own switch governs the whole package; these three govern the interfaces inside it.
 
 ---
 
-## Configuration
+## When Continue is available
 
-The interface switches live in `dsh-power-button.json` under the profile directory,
-written by the configuration page:
+The button appears only when the last turn has finished AND still has something to continue. The
+decision reads `reason.kind` of the newest `turn/end`:
 
-```json
-{ "floating": true, "sidebar": true }
-```
+| Ending | Button | What a click does |
+| --- | --- | --- |
+| `max-tokens` | yes | continues the cut-off sentence |
+| `aborted` / `interrupted` (Stop) | yes | continues from where it stopped |
+| `error` (rate limit, server error, timeout, transport loss, empty response, closed stream, …) | yes | continues from the break; re-answers if the turn produced no token at all |
+| `blocked` (a step was refused by admission) | yes | starts that turn again |
+| `forked` | yes | continues on the forked branch |
+| `completed` | no | the turn reached its natural end |
 
-The Host half also accepts an optional `config` block with two machine-dependent **ceilings**
-(the defaults suit an ordinary machine):
+The tooltip names which case applies. "Generate again" is the wording used when no assistant text
+survived the turn — it is honest about being a re-answer rather than a continuation.
 
-| Key | Default | Range | Meaning |
-| --- | --- | --- | --- |
-| `settleMs` | `500` | 0–30000 | Time allowed for the HTTP response to reach the browser before the shell dies with it |
-| `waitForExitSeconds` | `20` | 1–300 | Upper bound on the wait for the old shell to actually disappear |
+### Why an error can be continued
 
-Both are ceilings, not fixed waits: the relaunch continues as soon as the port is released.
-If the log shows `WARNING: proceeding after ...s`, raise them. Add `config` to the Host row
-in the profile's bundle patch:
+DSH's own `conversationContinuation` projection admits exactly six failure codes (`RATE_LIMIT`,
+`SERVER`, `TIMEOUT`, `TRANSPORT`, `EMPTY_RESPONSE`, `STREAM_CLOSED`). Every other failure — an
+unclassified upstream 5xx, a tool activation failure, `UNKNOWN` — has no continue affordance in
+the shipped logic. This bundle widens the test to "any ending that is not `completed`", because in
+all of those cases the history still ends on a continuable prefix and the user's intent is the
+same: carry on.
 
-```yaml
-- insert:
-    - id: ui-restart-button
-      name: 'dsh-power-button'
-      config:
-        settleMs: 800
-        waitForExitSeconds: 30
-```
+### How it works (without adding a character of prompt)
 
----
+The constraint is absolute: the outgoing request must end on the **truncated assistant message**,
+or the model answers afresh instead of continuing the prefix. Nothing new may be typed into the
+prompt.
 
-## How it works
+So the host queues one message whose `source.kind` is `runtime-context`. `AgentLoop.step()` uses
+that kind only as a turn starter and deliberately does **not** append it to the session surface, so
+`deriveMessages()` never sees it and the history the model receives is byte-identical to the one
+that was cut off.
 
-Electron's main process owns the desktop restart (`app.relaunch()` + `app.quit()`), but no
-channel exposes it to plugins, so a plugin cannot *request* a restart — it can only reproduce
-one from the outside. That reproduction has a chicken-and-egg constraint: **the DSH Host
-process is a child of the Electron main process**, so killing the shell kills the Host too,
-and whatever issues the kill must not live inside the Host process. The work therefore goes
-to a PowerShell helper that **escapes the process tree**:
+That alone is not enough: `agent/pre-step` is a waterfall, and the projection plugins
+(time-context, plan-mode, instructions, session-reference) each may append their own user message
+to `decision.messages` — and **those do land on the surface**. A single trailing user message turns
+prefix continuation back into a fresh answer. This bundle therefore listens with
+`{ prepend: true }`, wrapping the other listeners, and drops everything except its own nudge from
+the assembled decision.
 
-```
-click "Restart DSH" → confirm
-      ↓
-Host half POSTs /api/dsh-restart/action { action: "restart" }
-      ↓
-Host half waits synchronously for lib/restart-helper.ps1's BOOTSTRAP phase
-      ↓
-bootstrap re-creates itself as the WORKER through Win32_Process.Create (WMI), then exits
-      ↓
-worker (parented to WmiPrvSE, outside the app's process tree, unreachable by taskkill):
-  1. records the start time and the settleMs deadline
-  2. reads the shell's own command line while it is still alive  ← app.relaunch()'s semantics
-  3. asks which port the Host is listening on, and the ADDRESS it is bound to (IPv4 and IPv6)
-  4. kills the old process tree and waits for it to disappear
-  5. waits for the port to be released (decided by BINDING that address)
-  6. relaunches with the original arguments (handing over the DSH_* environment)
-  7. polls for the new instance's window and raises it, so it cannot stay hidden
-     behind another application
-```
-
-A `detached: true` `spawn` is not enough: the child still reports this process as its parent,
-and `taskkill /T` kills it too — and this helper's entire job is to kill the tree that
-contains it. Only a **WMI-created child** both escapes the tree and outlives its creator.
-
-"Quit" still goes through `taskkill`: once the Host process exits, this shell treats its exit
-code as a fatal error whatever the code is, so there is no more elegant route here.
+(If the user typed something in that same step, the batch is let through untouched: the intent
+there is plainly to send an ordinary message.)
 
 ---
 
-## Security
+## The stop ring
 
-All three routes live under the Host origin and must call `requestRejection` themselves —
-they are registered as `exact` routes, which are dispatched before the Host's `/api` prefix
-table and therefore shadow the authentication the Host puts on every other `/api` endpoint.
-The plugin reuses the Host's own authority (Host/Origin fence plus the browser auth cookie),
-staying inside the same permission model rather than beside it.
+"Stop generating" is **asynchronous**: the click hands a cancellation request to the Host, and the
+turn settles only when the stream actually closes. For those few hundred milliseconds the button
+looks exactly like one that did nothing, so people press it again.
 
-- Two more independent fences: the socket's remote address must be loopback (127/8, `::1`,
-  IPv4-mapped), and the `Host` header must name a loopback authority.
-  `X-Forwarded-For` is never trusted; `sec-fetch-site: cross-site` is refused outright.
-- Request bodies are bounded to 4 KiB and refused past that (not buffered and then inspected).
-- A **one-shot gate** on the destructive actions: once accepted it is never released, because
-  the process is going away anyway. It clears only when the helper could not be started at all
-  (spawn failure, bootstrap timeout, or the helper's dedicated exit code 3) — the one case
-  where a retry is meaningful.
-- Exit code 3 and the refusal marker distinguish "refused before touching anything" (safe to
-  retry) from "failed mid-flight" (the tree may already be killed, so the gate must never be
-  released). A WORKER-phase refusal happens after the bootstrap has already exited 0, so the
-  Host cannot observe it — the helper records it in a marker file, read on the next attempt.
+This bundle draws nothing at press time and waits **350 ms**:
 
----
+- If the turn settles inside that window (the common case — the composer swaps the button back to
+  Send), **no ring is drawn**. It does not invent a wait that never happened.
+- Otherwise a turning ring is parked around the button, following its rect, until the button goes
+  away, its label stops being a Stop label, or a 15-second backstop fires.
 
-## Troubleshooting
+So the ring says exactly one thing: "your click landed, it is still stopping".
 
-The log lives in DSH's logs directory as `restart-button.log` (plus a refusal marker
-`restart-button.refused`). That directory is resolved as `$DSH_HOME\logs`, then by deriving
-it from the Host's own profile argument, then `%TEMP%` — so on a machine whose `DSH_HOME` is
-not `~/.dsh`, the log is wherever it actually points.
+Two deliberate choices in the implementation:
+
+1. **The ring is a page-level `position: fixed` overlay, not a child of the button.** React owns
+   that button's subtree, so an injected node gets swept away on the next reconciliation; and
+   making the button `position: relative` to host an absolutely positioned child would mean
+   mutating a control this plugin does not render. The overlay is positioned from the button's own
+   `getBoundingClientRect()` and touches neither.
+2. **The press is read in the CAPTURE phase on `document`.** Whatever the button's own React
+   handler does — throw, no-op — cannot affect the ring, which is precisely the question being
+   answered.
+
+The Stop button carries no data attribute of its own, so the only stable handle is its
+`aria-label`; the package lists the "stop generating" string from all eight locales DSH ships. A
+new locale needs one more line there.
 
 ---
 
 ## Known limits
 
-- **Windows only.** Relies on `taskkill`, `Win32_Process.Create` (WMI) and
-  `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`; macOS / Linux answer
-  `supported: false` and hide both interfaces.
-- **WMI must be available.** If it is disabled or blocked by security software the bootstrap
-  fails and the UI shows the failure rather than silently doing nothing.
-- **It hard-interrupts work in progress.** That is the inherent cost of a forced kill; the
-  confirmation says so when work is running.
-- **A restart does not restore UI state.** It is equivalent to "quit and reopen": uncommitted
-  input is lost and a running turn does not resume.
-- **Neither interface appears in terminal mode (`dsh web`).** There is no restart semantics to
-  reproduce there; the plugin answers `supported: false` and hides entirely rather than
-  showing a button that does nothing.
-- **The new window is raised, but keyboard focus is not guaranteed.** Windows' foreground lock
-  keeps a background process from taking focus, so the window comes to the front while you may
-  need one click before typing.
-- **No "restart" row can be added to the avatar menu.** That menu's rows are a hard-coded array
-  with no menu-row slot.
-- **The sidebar seat relies on `:has()` and on the shell's class suffixes** (`footArea` /
-  `footerActions` / `settingsArea`); where `:has()` is unsupported that reflow is dropped
-  entirely and the layout reverts to the shell's own stacked foot — exactly what it was before
-  this plugin, so nothing gets worse. The floating button is unaffected either way.
+- **Windows only** (the whole package declares `os: win32`), because the power half needs
+  `taskkill` / WMI / PowerShell 5.1.
+- **Continue depends on the `runtime-context` internal convention.** It holds on 0.2.2-rc.5 as
+  measured here. If upstream changes how `AgentLoop.step()` treats that kind, continuation degrades
+  into a fresh answer — no error, just a worse outcome.
+- **The 350 ms grace period is empirical.** On a slow link the ring appears sooner; on a very fast
+  machine it may never be visible. Neither affects correctness.
+- **The stop ring does not know custom language packs**: a translation not in the list leaves the
+  Stop button unrecognised, and no ring appears. One line fixes it.
 
 ---
 
-## Files
+## Development
 
-| File | Purpose |
+`lib/` is the **shipped artifact**; there is no build step. After a change:
+
+```sh
+node test/run.cjs
+```
+
+All five suites drive the real `lib/` files through hand-written doubles for the Cordis context,
+the DOM and the clock:
+
+| Suite | Covers |
 | --- | --- |
-| `lib/index.js` | Host half: three loopback routes (status / action / config), desktop-topology probe, starts and awaits the bootstrap |
-| `lib/restart-helper.ps1` | Two-phase helper: the bootstrap re-creates itself through WMI; the worker reads the command line, asks for the port, kills the tree, waits for the conditions, relaunches with the original arguments, and raises the new window |
-| `lib/client.js` | Browser half: the floating control (drag / edge snap / hover reveal / jelly feedback), the sidebar power icon, and the configuration page's two switches |
-| `cordis.patch.yml` | Bundle patch: one Host row; the browser half is composed automatically from `dsh.client` |
-| `docs/DESIGN.md` | Engineering notes (Chinese): the evidence and measurements behind each counter-intuitive decision |
-| `LICENSE` | MIT |
-
-## Development (for contributors only)
-
-`lib/` is the finished loadable artifact. Edit it and the UI hot-reloads (when the profile
-installs the package with `link:`, source edits need no reinstall). Read `docs/DESIGN.md`
-before changing code — it records the places that look simplifiable and are not.
-
-## License
-
-MIT
+| `bundle.test.cjs` | browser-half factory shape, slot registration, disposal |
+| `guard.test.cjs` | the `agent/pre-step` purity guard across five shapes |
+| `host.test.cjs` | the continue decision matrix, both routes, the trust fence, config writes |
+| `continue-button.test.cjs` | visibility, per-ending copy, click, busy, failure, unmount |
+| `stop-ring.test.cjs` | grace period, overlay geometry, following, four clear paths, backstop, disposal |
 
 ---
 
-## Friendly links
+## Provenance and licence
 
-- [LINUX DO](https://linux.do)
+MIT. This repository is **forked from
+[WhichWitchWin/dsh-power-button](https://github.com/WhichWitchWin/dsh-power-button)** — the whole
+power half, `lib/restart-helper.ps1` included, comes from upstream — and merges the continue
+feature from `dsh-continue`. On top of that it makes two extensions: the continuable endings go
+from three to six, and the stop ring is new.
+
+Upstream's engineering notes remain in `docs/DESIGN.md`, which records the evidence and
+measurements behind every counter-intuitive decision in the power half. The two fork-specific
+features are documented above.

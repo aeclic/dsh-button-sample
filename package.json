@@ -1,7 +1,7 @@
 {
-  "name": "dsh-power-button",
+  "name": "dsh-button-sample",
   "version": "0.1.0",
-  "description": "Restart and quit controls for the DSH desktop GUI, in two independently switchable places: a draggable floating button that snaps to a screen edge and collapses into a thin strip, and a power button in the sidebar footer.",
+  "description": "One sample bundle for the DSH desktop GUI: restart/quit power controls (floating button and sidebar icon) plus a ChatGPT-style Continue button that resumes a turn cut off by max-tokens, by Stop, or by a provider failure.",
   "keywords": [
     "deepseek",
     "deepseek-harness",
@@ -11,18 +11,24 @@
     "restart",
     "quit",
     "power-menu",
+    "continue",
+    "continue-generating",
     "cordis"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/WhichWitchWin/dsh-power-button.git"
+    "url": "git+https://github.com/aeclic/dsh-button-sample.git"
   },
-  "homepage": "https://github.com/WhichWitchWin/dsh-power-button#readme",
+  "homepage": "https://github.com/aeclic/dsh-button-sample#readme",
   "bugs": {
-    "url": "https://github.com/WhichWitchWin/dsh-power-button/issues"
+    "url": "https://github.com/aeclic/dsh-button-sample/issues"
   },
+  "forkedFrom": "https://github.com/WhichWitchWin/dsh-power-button",
   "type": "module",
   "main": "lib/index.js",
+  "scripts": {
+    "test": "node test/run.cjs"
+  },
   "os": [
     "win32"
   ],
@@ -42,7 +48,8 @@
     "README.en.md",
     "docs",
     "LICENSE",
-    "icon.svg"
+    "icon.svg",
+    "test"
   ],
   "dsh": {
     "bundle": {
